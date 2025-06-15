@@ -22,14 +22,14 @@ jobs:
     - name: 安装系统依赖
       run: |
         sudo apt-get update
-        sudo apt-get install -y openjdk-8-jdk autoconf libtool pkg-config \
+        sudo apt-get install -y openjdk-11-jdk autoconf libtool pkg-config \
           zlib1g-dev libncurses5-dev libncursesw5-dev libncurses-dev cmake \
-          libffi-dev libssl-dev build-essential python3-dev git unzip
+          libffi-dev libssl-dev build-essential python3-dev git unzip wget
     
     - name: 设置Java环境
       run: |
-        export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
-        echo "JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64" >> $GITHUB_ENV
+        export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+        echo "JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64" >> $GITHUB_ENV
     
     - name: 安装Python依赖
       run: |
@@ -47,6 +47,10 @@ jobs:
         restore-keys: |
           buildozer-cache-${{ runner.os }}-
     
+    - name: 初始化buildozer
+      run: |
+        buildozer init
+        
     - name: 编译APK
       run: |
         echo "开始编译Android APK..."
