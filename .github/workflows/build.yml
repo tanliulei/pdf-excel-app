@@ -47,10 +47,6 @@ jobs:
         restore-keys: |
           buildozer-cache-${{ runner.os }}-
     
-    - name: 初始化buildozer
-      run: |
-        buildozer init
-        
     - name: 编译APK
       run: |
         echo "开始编译Android APK..."
