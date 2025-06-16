@@ -16,52 +16,40 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-20.04
     timeout-minutes: 180
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.8'
 
-      - name: Setup Java 17
+      - name: Setup Java 8
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '8'
 
-      - name: Install system dependencies including AIDL
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            git zip unzip openjdk-17-jdk python3-pip \
+            git zip unzip openjdk-8-jdk python3-pip \
             autoconf libtool pkg-config zlib1g-dev \
             libncurses5-dev libncursesw5-dev cmake \
             libffi-dev libssl-dev build-essential \
             libltdl-dev ccache \
             aidl android-tools-adb android-tools-fastboot
 
-      - name: Verify AIDL installation
-        run: |
-          which aidl || echo "AIDL not found in PATH"
-          aidl --version || echo "AIDL version check failed"
-          dpkg -l | grep aidl || echo "AIDL package not installed"
-
-      - name: Setup ccache
-        run: |
-          echo "/usr/lib/ccache" >> $GITHUB_PATH
-          ccache --max-size=2G
-          ccache --set-config=compression=true
-
       - name: Install Python packages
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install cython==0.29.36
-          pip install kivy==2.2.0
-          pip install buildozer==1.5.0
+          pip install cython==0.29.32
+          pip install kivy==2.1.0
+          pip install buildozer==1.4.0
           pip install -r requirements.txt
 
       - name: Cache buildozer global directory
@@ -76,19 +64,22 @@ jobs:
           path: .buildozer
           key: buildozer-${{ hashFiles('buildozer.spec') }}-${{ hashFiles('requirements.txt') }}
 
-      - name: Setup Android SDK
+      - name: Setup Android SDK and NDK
         run: |
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          # 下载并设置Android SDK
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-6858069_latest.zip
           unzip -q commandlinetools-linux-*_latest.zip
           mkdir -p $HOME/android-sdk/cmdline-tools
           mv cmdline-tools $HOME/android-sdk/cmdline-tools/latest
+          
+          # 设置环境变量
           export ANDROID_HOME=$HOME/android-sdk
-          export JAVA_HOME=$JAVA_HOME_17_X64
+          export JAVA_HOME=$JAVA_HOME_8_X64
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
-          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> $GITHUB_ENV
+          echo "JAVA_HOME=$JAVA_HOME_8_X64" >> $GITHUB_ENV
           echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
-          echo "$HOME/android-sdk/build-tools/34.0.0" >> $GITHUB_PATH
+          echo "$HOME/android-sdk/build-tools/28.0.3" >> $GITHUB_PATH
 
       - name: Accept Android licenses
         run: |
@@ -101,44 +92,34 @@ jobs:
       - name: Install Android SDK components
         run: |
           $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager \
-            "platforms;android-34" \
-            "build-tools;34.0.0" \
+            "platforms;android-28" \
+            "build-tools;28.0.3" \
             "platform-tools" \
-            "ndk;26.1.10909125"
+            "ndk;21.4.7075529"
 
-      - name: Setup AIDL path and verify
+      - name: Setup build environment
         run: |
-          # 确保系统AIDL在PATH中
-          export PATH="/usr/bin:$PATH"
-          echo "/usr/bin" >> $GITHUB_PATH
+          # 设置NDK路径
+          export ANDROIDNDK=$HOME/android-sdk/ndk/21.4.7075529
+          export ANDROIDAPI=28
+          export ANDROIDMINAPI=21
+          echo "ANDROIDNDK=$HOME/android-sdk/ndk/21.4.7075529" >> $GITHUB_ENV
+          echo "ANDROIDAPI=28" >> $GITHUB_ENV
+          echo "ANDROIDMINAPI=21" >> $GITHUB_ENV
           
-          # 验证AIDL可用性
-          echo "Checking AIDL availability:"
-          which aidl
-          aidl --version
-          
-          # 创建AIDL符号链接（如果需要）
-          if [ ! -f "$HOME/android-sdk/build-tools/34.0.0/aidl" ]; then
-            ln -sf /usr/bin/aidl "$HOME/android-sdk/build-tools/34.0.0/aidl"
-          fi
-          
-          echo "AIDL setup completed"
-
-      - name: Build APK with AIDL support
-        run: |
-          echo "Building APK with AIDL support..."
-          export PATH="/usr/bin:$HOME/android-sdk/build-tools/34.0.0:$PATH"
-          
-          # 验证构建环境
+          # 验证环境
           echo "=== Build Environment ==="
+          echo "ANDROID_HOME: $ANDROID_HOME"
+          echo "ANDROIDNDK: $ANDROIDNDK"
+          echo "JAVA_HOME: $JAVA_HOME"
           echo "AIDL location: $(which aidl)"
-          echo "AIDL version: $(aidl --version)"
           echo "Java version: $(java -version)"
           echo "Python version: $(python --version)"
-          echo "Buildozer version: $(buildozer --version)"
           echo "========================="
-          
-          # 开始构建
+
+      - name: Build APK
+        run: |
+          echo "Building APK..."
           buildozer android debug
 
       - name: Find and prepare APK
@@ -171,12 +152,11 @@ jobs:
             echo "APK size: $APK_SIZE"
           else
             echo "❌ APK not found!"
-            echo "Listing all files in project:"
-            find . -type f -name "*.apk" 2>/dev/null || echo "No APK files found"
-            echo "Listing bin directory:"
-            ls -la bin/ 2>/dev/null || echo "bin directory not found"
-            echo "Listing buildozer directory structure:"
-            find .buildozer -name "*.apk" 2>/dev/null || echo "No APK in .buildozer"
+            echo "Checking build logs..."
+            if [ -f .buildozer/logs/buildozer.log ]; then
+              echo "Last 50 lines of buildozer log:"
+              tail -50 .buildozer/logs/buildozer.log
+            fi
             exit 1
           fi
 
