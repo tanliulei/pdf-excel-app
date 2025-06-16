@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 120
+    timeout-minutes: 180
     
     steps:
     - uses: actions/checkout@v4
@@ -18,101 +18,95 @@ jobs:
       with:
         python-version: '3.9'
     
-    - name: Setup Java
+    - name: Setup Java 8
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
-        java-version: '11'
+        java-version: '8'
     
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y git zip unzip openjdk-11-jdk python3-pip \
+        sudo apt-get install -y git zip unzip openjdk-8-jdk python3-pip \
           autoconf libtool pkg-config zlib1g-dev libncurses5-dev \
-          libncursesw5-dev cmake libffi-dev libssl-dev
+          libncursesw5-dev cmake libffi-dev libssl-dev \
+          build-essential libltdl-dev
     
     - name: Install Python packages
       run: |
         python -m pip install --upgrade pip
-        pip install buildozer==1.5.0
-        pip install cython==0.29.36
-        pip install kivy[base]==2.1.0
+        pip install buildozer==1.4.0
+        pip install cython==0.29.32
+        pip install kivy==2.0.0
         pip install pandas pdfplumber openpyxl xlsxwriter
     
-    - name: Setup Android SDK
+    - name: Setup Android SDK with AIDL
       run: |
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
+        # Download Android SDK
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-6858069_latest.zip
         unzip -q commandlinetools-linux-*_latest.zip
         mkdir -p $HOME/android-sdk/cmdline-tools
         mv cmdline-tools $HOME/android-sdk/cmdline-tools/latest
         
+        # Set environment variables
         export ANDROID_HOME=$HOME/android-sdk
-        export JAVA_HOME=$JAVA_HOME_11_X64
+        export JAVA_HOME=$JAVA_HOME_8_X64
         echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
-        echo "JAVA_HOME=$JAVA_HOME_11_X64" >> $GITHUB_ENV
+        echo "JAVA_HOME=$JAVA_HOME_8_X64" >> $GITHUB_ENV
         echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
         echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
+        echo "$HOME/android-sdk/build-tools/28.0.3" >> $GITHUB_PATH
         
+        # Accept all licenses first
         yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
+        
+        # Install specific versions that work together
         $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager \
-          "platforms;android-31" \
-          "build-tools;31.0.0" \
+          "platforms;android-28" \
+          "build-tools;28.0.3" \
           "platform-tools" \
-          "ndk;23.2.8568313"
+          "ndk;21.4.7075529"
+        
+        # Verify AIDL installation
+        ls -la $HOME/android-sdk/build-tools/28.0.3/aidl || echo "AIDL not found"
     
-    - name: Build APK with debug output
+    - name: Update buildozer.spec for compatibility
       run: |
-        echo "Starting buildozer build..."
-        buildozer android debug -v
-        echo "Build command completed"
-        
-        echo "Checking for APK files..."
-        find . -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
-        
-        echo "Listing bin directory..."
-        ls -la bin/ 2>/dev/null || echo "No bin directory"
-        
-        echo "Checking buildozer output directories..."
-        find .buildozer -name "*.apk" -type f 2>/dev/null || echo "No APK in .buildozer"
+        sed -i 's/android.api = 31/android.api = 28/' buildozer.spec
+        sed -i 's/android.sdk = 31/android.sdk = 28/' buildozer.spec
+        sed -i 's/android.ndk = 23.2.8568313/android.ndk = 21.4.7075529/' buildozer.spec
+        sed -i 's/android.build_tools = 31.0.0/android.build_tools = 28.0.3/' buildozer.spec
     
-    - name: Locate and prepare APK
+    - name: Build APK
       run: |
-        APK_PATH=""
+        echo "Building APK with compatible versions..."
+        buildozer android debug
+    
+    - name: Find and upload APK
+      run: |
+        echo "Searching for APK files..."
+        find . -name "*.apk" -type f
         
-        # Check multiple possible locations
+        APK_FILE=""
         if [ -f bin/*.apk ]; then
-          APK_PATH=$(ls bin/*.apk | head -1)
-        elif [ -d .buildozer/android/platform ]; then
-          APK_PATH=$(find .buildozer/android/platform -name "*.apk" -type f | head -1)
+          APK_FILE=$(ls bin/*.apk | head -1)
+        elif [ -f .buildozer/android/platform/build*/outputs/apk/*/*.apk ]; then
+          APK_FILE=$(find .buildozer/android/platform/build*/outputs/apk -name "*.apk" | head -1)
         fi
         
-        if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
-          echo "APK found at: $APK_PATH"
-          mkdir -p upload
-          cp "$APK_PATH" upload/pdf-excel-converter.apk
-          ls -la upload/
-          echo "apk_ready=true" >> $GITHUB_OUTPUT
+        if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
+          echo "APK found: $APK_FILE"
+          mkdir -p output
+          cp "$APK_FILE" output/pdf-excel-converter.apk
+          ls -la output/
         else
-          echo "APK not found - build may have failed"
-          echo "apk_ready=false" >> $GITHUB_OUTPUT
+          echo "APK not found"
           exit 1
         fi
-      id: prepare_apk
     
     - name: Upload APK
-      if: steps.prepare_apk.outputs.apk_ready == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: pdf-excel-android-app
-        path: upload/pdf-excel-converter.apk
+        path: output/pdf-excel-converter.apk
         retention-days: 30
-    
-    - name: Upload debug logs
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: build-debug-logs
-        path: |
-          .buildozer/
-          *.log
-        retention-days: 7
