@@ -19,7 +19,7 @@ source.include_exts = py,png,jpg,kv,atlas
 version = 1.0
 
 # (list) Application requirements
-requirements = python3,kivy==2.1.0,pandas,pdfplumber,openpyxl,xlsxwriter,plyer
+requirements = python3,kivy==2.2.0,pandas,pdfplumber,openpyxl,xlsxwriter,plyer
 
 # (str) Presplash of the application
 #presplash.filename = %(source.dir)s/data/presplash.png
@@ -50,19 +50,19 @@ fullscreen = 0
 android.permissions = READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE,INTERNET
 
 # (int) Target Android API, should be as high as possible.
-android.api = 31
+android.api = 34
 
 # (int) Minimum API your APK will support.
 android.minapi = 21
 
 # (str) Android NDK version to use
-android.ndk = 25b
+android.ndk = 26.1.10909125
 
 # (str) Android SDK version to use
-android.sdk = 31
+android.sdk = 34
 
 # (str) Android build tools version
-android.build_tools = 31.0.0
+android.build_tools = 34.0.0
 
 # (str) Android entry point, default is ok for Kivy-based app
 android.entrypoint = org.kivy.android.PythonActivity
