@@ -68,15 +68,26 @@ jobs:
         # Install SDK components without prompts
         $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --verbose \
           "platforms;android-30" \
+          "platforms;android-28" \
           "build-tools;30.0.3" \
+          "build-tools;29.0.3" \
+          "build-tools;28.0.3" \
           "platform-tools" \
           "ndk;21.4.7075529"
         
-        # Install fallback build-tools for AIDL
-        $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "build-tools;29.0.3"
+        # Manually create AIDL symlink if needed
+        AIDL_PATH=$(find $HOME/android-sdk -name "aidl" -type f 2>/dev/null | head -1)
+        if [ -n "$AIDL_PATH" ]; then
+          echo "AIDL found at: $AIDL_PATH"
+          sudo ln -sf "$AIDL_PATH" /usr/local/bin/aidl
+        else
+          echo "AIDL not found, installing alternative..."
+          # Install system AIDL as fallback
+          sudo apt-get install -y aidl
+        fi
         
-        # Verify AIDL installation
-        find $HOME/android-sdk -name "aidl" -type f 2>/dev/null || echo "Searching for AIDL..."
+        # Verify AIDL is accessible
+        which aidl || echo "AIDL installation verification failed"
     
     - name: Build APK
       run: |
