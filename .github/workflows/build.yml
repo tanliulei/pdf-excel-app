@@ -57,19 +57,23 @@ jobs:
         echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
         echo "$HOME/android-sdk/build-tools/30.0.3" >> $GITHUB_PATH
         
-        # Accept all licenses with auto-confirmation
-        echo "y" | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses || true
-        echo "y" | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --update || true
+        # Force accept all licenses using multiple methods
+        mkdir -p $HOME/android-sdk/licenses
+        echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/android-sdk/licenses/android-sdk-license
+        echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/android-sdk/licenses/android-sdk-license
+        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> $HOME/android-sdk/licenses/android-sdk-license
+        echo "84831b9409646a918e30573bab4c9c91346d8abd" > $HOME/android-sdk/licenses/android-sdk-preview-license
+        echo "d975f751698a77b662f1254ddbeed3901e976f5a" > $HOME/android-sdk/licenses/intel-android-extra-license
         
-        # Install compatible SDK components
-        $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager \
+        # Install SDK components without prompts
+        $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --verbose \
           "platforms;android-30" \
           "build-tools;30.0.3" \
           "platform-tools" \
-          "ndk;21.4.7075529" || true
+          "ndk;21.4.7075529"
         
-        # Install fallback build-tools if needed
-        $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "build-tools;29.0.3" || true
+        # Install fallback build-tools for AIDL
+        $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "build-tools;29.0.3"
         
         # Verify AIDL installation
         find $HOME/android-sdk -name "aidl" -type f 2>/dev/null || echo "Searching for AIDL..."
