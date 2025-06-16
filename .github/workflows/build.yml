@@ -23,16 +23,16 @@ jobs:
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
-        java-version: '11'
+        java-version: '8'
     
     - name: 设置Android SDK
       uses: android-actions/setup-android@v3
       with:
-        cmdline-tools-version: 10406996
+        cmdline-tools-version: 9477386
         packages: |
-          platforms;android-33
-          build-tools;33.0.2
-          ndk;25.2.9519653
+          platforms;android-30
+          build-tools;30.0.3
+          ndk;23.2.8568313
           platform-tools
     
     - name: 安装系统依赖
