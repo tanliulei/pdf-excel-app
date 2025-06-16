@@ -70,13 +70,6 @@ jobs:
         # Verify AIDL installation
         ls -la $HOME/android-sdk/build-tools/28.0.3/aidl || echo "AIDL not found"
     
-    - name: Update buildozer.spec for compatibility
-      run: |
-        sed -i 's/android.api = 31/android.api = 28/' buildozer.spec
-        sed -i 's/android.sdk = 31/android.sdk = 28/' buildozer.spec
-        sed -i 's/android.ndk = 23.2.8568313/android.ndk = 21.4.7075529/' buildozer.spec
-        sed -i 's/android.build_tools = 31.0.0/android.build_tools = 28.0.3/' buildozer.spec
-    
     - name: Build APK
       run: |
         echo "Building APK with compatible versions..."
