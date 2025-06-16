@@ -1,46 +1,51 @@
 name: "Build Android APK"
 
 on:
+  workflow_dispatch:
   push:
     branches: [ main, master ]
-  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 180
+    timeout-minutes: 120
     
     steps:
-    - name: "Checkout code"
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
     
-    - name: "Setup Python"
+    - name: Setup Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.9'
     
-    - name: "Setup Java"
+    - name: Setup Java
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
         java-version: '11'
     
-    - name: "Setup Android environment"
+    - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y openjdk-11-jdk wget unzip git build-essential \
-          python3-dev autoconf libtool pkg-config zlib1g-dev libncurses5-dev \
+        sudo apt-get install -y git zip unzip openjdk-11-jdk python3-pip \
+          autoconf libtool pkg-config zlib1g-dev libncurses5-dev \
           libncursesw5-dev cmake libffi-dev libssl-dev
-        
-        # Download Android SDK
+    
+    - name: Install Python packages
+      run: |
+        python -m pip install --upgrade pip
+        pip install buildozer==1.5.0
+        pip install cython==0.29.36
+        pip install kivy[base]==2.1.0
+        pip install pandas pdfplumber openpyxl xlsxwriter
+    
+    - name: Setup Android SDK
+      run: |
         wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
         unzip -q commandlinetools-linux-*_latest.zip
-        
-        # Setup Android SDK
         mkdir -p $HOME/android-sdk/cmdline-tools
         mv cmdline-tools $HOME/android-sdk/cmdline-tools/latest
         
-        # Set environment
         export ANDROID_HOME=$HOME/android-sdk
         export JAVA_HOME=$JAVA_HOME_11_X64
         echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
@@ -48,7 +53,6 @@ jobs:
         echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
         echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
         
-        # Install Android components
         yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
         $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager \
           "platforms;android-31" \
@@ -56,59 +60,58 @@ jobs:
           "platform-tools" \
           "ndk;23.2.8568313"
     
-    - name: "Install Python dependencies"
+    - name: Build APK with debug output
       run: |
-        python -m pip install --upgrade pip setuptools wheel
-        pip install buildozer==1.5.0
-        pip install cython==0.29.36
-        pip install kivy[base]==2.1.0
-        pip install pandas pdfplumber openpyxl xlsxwriter
-    
-    - name: "Build APK"
-      run: |
-        echo "Building Android APK..."
-        timeout 120m buildozer android debug || echo "Build completed or timed out"
-    
-    - name: "Find and upload APK"
-      run: |
-        echo "Searching for APK files..."
-        find . -name "*.apk" -type f -exec ls -la {} \;
+        echo "Starting buildozer build..."
+        buildozer android debug -v
+        echo "Build command completed"
         
-        # Look for APK in common locations
-        APK_FILE=""
+        echo "Checking for APK files..."
+        find . -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
+        
+        echo "Listing bin directory..."
+        ls -la bin/ 2>/dev/null || echo "No bin directory"
+        
+        echo "Checking buildozer output directories..."
+        find .buildozer -name "*.apk" -type f 2>/dev/null || echo "No APK in .buildozer"
+    
+    - name: Locate and prepare APK
+      run: |
+        APK_PATH=""
+        
+        # Check multiple possible locations
         if [ -f bin/*.apk ]; then
-          APK_FILE=$(ls bin/*.apk | head -1)
-        elif [ -f .buildozer/android/platform/build*/outputs/apk/*/*.apk ]; then
-          APK_FILE=$(find .buildozer/android/platform/build*/outputs/apk -name "*.apk" | head -1)
-        elif [ -f .buildozer/android/platform/build*/bin/*.apk ]; then
-          APK_FILE=$(find .buildozer/android/platform/build*/bin -name "*.apk" | head -1)
+          APK_PATH=$(ls bin/*.apk | head -1)
+        elif [ -d .buildozer/android/platform ]; then
+          APK_PATH=$(find .buildozer/android/platform -name "*.apk" -type f | head -1)
         fi
         
-        if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
-          echo "APK found: $APK_FILE"
-          mkdir -p output
-          cp "$APK_FILE" output/pdf-excel-converter.apk
-          echo "APK copied to output directory"
-          ls -la output/
+        if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
+          echo "APK found at: $APK_PATH"
+          mkdir -p upload
+          cp "$APK_PATH" upload/pdf-excel-converter.apk
+          ls -la upload/
+          echo "apk_ready=true" >> $GITHUB_OUTPUT
         else
-          echo "No APK file found, but build may have completed"
-          echo "Build logs and intermediate files:"
-          ls -la .buildozer/ 2>/dev/null || echo "No .buildozer directory"
+          echo "APK not found - build may have failed"
+          echo "apk_ready=false" >> $GITHUB_OUTPUT
+          exit 1
         fi
+      id: prepare_apk
     
-    - name: "Upload APK if exists"
+    - name: Upload APK
+      if: steps.prepare_apk.outputs.apk_ready == 'true'
       uses: actions/upload-artifact@v4
-      if: hashFiles('output/pdf-excel-converter.apk') != ''
       with:
         name: pdf-excel-android-app
-        path: output/pdf-excel-converter.apk
+        path: upload/pdf-excel-converter.apk
         retention-days: 30
     
-    - name: "Upload build logs"
-      uses: actions/upload-artifact@v4
+    - name: Upload debug logs
       if: always()
+      uses: actions/upload-artifact@v4
       with:
-        name: build-logs
+        name: build-debug-logs
         path: |
           .buildozer/
           *.log
