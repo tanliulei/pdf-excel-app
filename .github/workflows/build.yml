@@ -1,4 +1,4 @@
-name: "Build Android APK"
+name: "Build Android APK - Stable Version"
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-20.04
     timeout-minutes: 180
     
     steps:
@@ -16,7 +16,7 @@ jobs:
     - name: Setup Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
+        python-version: '3.8'
     
     - name: Setup Java 8
       uses: actions/setup-java@v4
@@ -24,13 +24,13 @@ jobs:
         distribution: 'temurin'
         java-version: '8'
     
-    - name: Install system dependencies
+    - name: Install system dependencies including AIDL
       run: |
         sudo apt-get update
         sudo apt-get install -y git zip unzip openjdk-8-jdk python3-pip \
           autoconf libtool pkg-config zlib1g-dev libncurses5-dev \
           libncursesw5-dev cmake libffi-dev libssl-dev \
-          build-essential libltdl-dev
+          build-essential libltdl-dev aidl android-tools-adb
     
     - name: Install Python packages
       run: |
@@ -40,10 +40,10 @@ jobs:
         pip install buildozer==1.4.0
         pip install pandas pdfplumber openpyxl xlsxwriter
     
-    - name: Setup Android SDK with AIDL
+    - name: Setup Android SDK - Legacy Stable
       run: |
-        # Download Android SDK
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-6858069_latest.zip
+        # Use older, more stable command line tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-7583922_latest.zip
         unzip -q commandlinetools-linux-*_latest.zip
         mkdir -p $HOME/android-sdk/cmdline-tools
         mv cmdline-tools $HOME/android-sdk/cmdline-tools/latest
@@ -55,43 +55,60 @@ jobs:
         echo "JAVA_HOME=$JAVA_HOME_8_X64" >> $GITHUB_ENV
         echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
         echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
-        echo "$HOME/android-sdk/build-tools/30.0.3" >> $GITHUB_PATH
+        echo "$HOME/android-sdk/build-tools/28.0.3" >> $GITHUB_PATH
+        echo "/usr/bin" >> $GITHUB_PATH
         
-        # Force accept all licenses using multiple methods
+        # Pre-accept licenses
         mkdir -p $HOME/android-sdk/licenses
         echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/android-sdk/licenses/android-sdk-license
         echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/android-sdk/licenses/android-sdk-license
         echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> $HOME/android-sdk/licenses/android-sdk-license
-        echo "84831b9409646a918e30573bab4c9c91346d8abd" > $HOME/android-sdk/licenses/android-sdk-preview-license
-        echo "d975f751698a77b662f1254ddbeed3901e976f5a" > $HOME/android-sdk/licenses/intel-android-extra-license
         
-        # Install SDK components without prompts
-        $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --verbose \
-          "platforms;android-30" \
+        # Install stable versions that definitely include AIDL
+        $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager \
           "platforms;android-28" \
-          "build-tools;30.0.3" \
-          "build-tools;29.0.3" \
           "build-tools;28.0.3" \
-          "platform-tools" \
-          "ndk;21.4.7075529"
+          "platform-tools"
         
-        # Manually create AIDL symlink if needed
-        AIDL_PATH=$(find $HOME/android-sdk -name "aidl" -type f 2>/dev/null | head -1)
-        if [ -n "$AIDL_PATH" ]; then
-          echo "AIDL found at: $AIDL_PATH"
-          sudo ln -sf "$AIDL_PATH" /usr/local/bin/aidl
-        else
-          echo "AIDL not found, installing alternative..."
-          # Install system AIDL as fallback
-          sudo apt-get install -y aidl
-        fi
+        # Verify system AIDL
+        which aidl
+        aidl --version || echo "System AIDL available"
         
-        # Verify AIDL is accessible
-        which aidl || echo "AIDL installation verification failed"
+        # Double check SDK AIDL
+        ls -la $HOME/android-sdk/build-tools/28.0.3/ | grep aidl || echo "SDK aidl check"
+    
+    - name: Update buildozer config for stable build
+      run: |
+        cat > buildozer.spec << EOF
+        [app]
+        title = PDF转Excel转换工具
+        package.name = pdftoexcel
+        package.domain = com.pdftools.converter
+        source.dir = .
+        source.include_exts = py,png,jpg,kv,atlas
+        version = 1.0
+        requirements = python3,kivy==2.1.0,pandas,pdfplumber,openpyxl,xlsxwriter
+        orientation = portrait
+        
+        [buildozer]
+        log_level = 2
+        
+        [android]
+        fullscreen = 0
+        android.permissions = READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
+        android.api = 28
+        android.minapi = 21
+        android.ndk = 21.4.7075529
+        android.sdk = 28
+        android.build_tools = 28.0.3
+        android.private_storage = False
+        android.accept_sdk_license = True
+        EOF
     
     - name: Build APK
       run: |
-        echo "Building APK with compatible versions..."
+        echo "Building with stable Android tools..."
+        echo "AIDL location: $(which aidl)"
         buildozer android debug
     
     - name: Find and upload APK
