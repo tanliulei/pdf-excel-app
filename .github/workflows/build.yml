@@ -16,81 +16,166 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     timeout-minutes: 180
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.8'
+          python-version: '3.9'
 
-      - name: Setup Java 8
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '8'
+          java-version: '17'
 
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git zip unzip openjdk-8-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev build-essential libltdl-dev
+          sudo apt-get install -y \
+            git zip unzip openjdk-17-jdk python3-pip \
+            autoconf libtool pkg-config zlib1g-dev \
+            libncurses5-dev libncursesw5-dev cmake \
+            libffi-dev libssl-dev build-essential \
+            libltdl-dev ccache
+
+      - name: Setup ccache
+        run: |
+          echo "/usr/lib/ccache" >> $GITHUB_PATH
+          ccache --max-size=2G
+          ccache --set-config=compression=true
 
       - name: Install Python packages
         run: |
-          python -m pip install --upgrade pip
-          pip install cython==0.29.32
-          pip install kivy==2.1.0
-          pip install buildozer==1.4.0
+          python -m pip install --upgrade pip setuptools wheel
+          pip install cython==0.29.36
+          pip install kivy==2.2.0
+          pip install buildozer==1.5.0
           pip install -r requirements.txt
+
+      - name: Cache buildozer global directory
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-global-${{ hashFiles('buildozer.spec') }}
+
+      - name: Cache buildozer directory
+        uses: actions/cache@v4
+        with:
+          path: .buildozer
+          key: buildozer-${{ hashFiles('buildozer.spec') }}-${{ hashFiles('requirements.txt') }}
 
       - name: Setup Android SDK
         run: |
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-6858069_latest.zip
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
           unzip -q commandlinetools-linux-*_latest.zip
           mkdir -p $HOME/android-sdk/cmdline-tools
           mv cmdline-tools $HOME/android-sdk/cmdline-tools/latest
           export ANDROID_HOME=$HOME/android-sdk
-          export JAVA_HOME=$JAVA_HOME_8_X64
+          export JAVA_HOME=$JAVA_HOME_17_X64
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
-          echo "JAVA_HOME=$JAVA_HOME_8_X64" >> $GITHUB_ENV
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> $GITHUB_ENV
           echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
           echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
-          echo "$HOME/android-sdk/build-tools/31.0.0" >> $GITHUB_PATH
+          echo "$HOME/android-sdk/build-tools/34.0.0" >> $GITHUB_PATH
+
+      - name: Accept Android licenses
+        run: |
           mkdir -p $HOME/android-sdk/licenses
           echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/android-sdk/licenses/android-sdk-license
           echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/android-sdk/licenses/android-sdk-license
           echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" >> $HOME/android-sdk/licenses/android-sdk-license
-          $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-31" "build-tools;31.0.0" "platform-tools" "ndk;25b"
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" > $HOME/android-sdk/licenses/android-sdk-preview-license
+
+      - name: Install Android SDK components
+        run: |
+          $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-34" \
+            "build-tools;34.0.0" \
+            "platform-tools" \
+            "ndk;26.1.10909125"
 
       - name: Build APK
         run: |
           echo "Building APK..."
           buildozer android debug
 
-      - name: Find and upload APK
+      - name: Find and prepare APK
         run: |
+          echo "Searching for APK files..."
           find . -name "*.apk" -type f
+          
           APK_FILE=""
+          # 检查多个可能的位置
           if [ -f bin/*.apk ]; then
             APK_FILE=$(ls bin/*.apk | head -1)
+            echo "Found APK in bin/: $APK_FILE"
           elif [ -f .buildozer/android/platform/build*/outputs/apk/*/*.apk ]; then
             APK_FILE=$(find .buildozer/android/platform/build*/outputs/apk -name "*.apk" | head -1)
+            echo "Found APK in build outputs: $APK_FILE"
+          elif [ -f .buildozer/android/platform/build*/dist/*.apk ]; then
+            APK_FILE=$(find .buildozer/android/platform/build*/dist -name "*.apk" | head -1)
+            echo "Found APK in dist: $APK_FILE"
           fi
+          
           if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
             mkdir -p output
             cp "$APK_FILE" output/pdf-excel-converter.apk
+            echo "APK copied to output directory"
             ls -la output/
+            
+            # 获取APK信息
+            APK_SIZE=$(du -h output/pdf-excel-converter.apk | cut -f1)
+            echo "APK_SIZE=$APK_SIZE" >> $GITHUB_ENV
+            echo "APK size: $APK_SIZE"
           else
-            echo "APK not found"
+            echo "❌ APK not found!"
+            echo "Listing all files in project:"
+            find . -type f -name "*.apk" 2>/dev/null || echo "No APK files found"
+            echo "Listing bin directory:"
+            ls -la bin/ 2>/dev/null || echo "bin directory not found"
+            echo "Listing buildozer directory structure:"
+            find .buildozer -name "*.apk" 2>/dev/null || echo "No APK in .buildozer"
             exit 1
           fi
 
-      - name: Upload APK
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pdf-excel-android-app
+          name: pdf-excel-android-app-${{ github.run_number }}
           path: output/pdf-excel-converter.apk
           retention-days: 30
+
+      - name: Create Release (if tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: output/pdf-excel-converter.apk
+          name: PDF to Excel Converter v${{ github.ref_name }}
+          body: |
+            ## PDF到Excel转换工具 Android APK
+            
+            ### 功能特性
+            - 📄 PDF文件读取和解析
+            - 📊 智能表格数据提取
+            - 🔄 自动数据处理和格式化
+            - 💾 Excel文件生成和保存
+            - 📱 安卓原生界面
+            
+            ### 安装说明
+            1. 下载APK文件
+            2. 在安卓设备上启用"未知来源"安装
+            3. 安装APK文件
+            4. 授予存储权限
+            
+            ### 系统要求
+            - Android 5.0+ (API 21+)
+            - 存储空间: 100MB+
+            
+            **APK大小**: ${{ env.APK_SIZE }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
