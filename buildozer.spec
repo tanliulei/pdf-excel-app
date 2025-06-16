@@ -19,7 +19,7 @@ source.include_exts = py,png,jpg,kv,atlas
 version = 1.0
 
 # (list) Application requirements
-requirements = python3,kivy,pandas,pdfplumber,openpyxl,xlsxwriter
+requirements = python3,kivy==2.1.0,pandas,pdfplumber,openpyxl,xlsxwriter
 
 # (str) Presplash of the application
 #presplash.filename = %(source.dir)s/data/presplash.png
@@ -44,19 +44,19 @@ fullscreen = 0
 android.permissions = READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
 
 # (int) Target Android API, should be as high as possible.
-android.api = 31
+android.api = 28
 
 # (int) Minimum API your APK will support.
 android.minapi = 21
 
 # (str) Android NDK version to use
-android.ndk = 23.2.8568313
+android.ndk = 21.4.7075529
 
 # (str) Android SDK version to use
-android.sdk = 31
+android.sdk = 28
 
 # (str) Android build tools version
-android.build_tools = 31.0.0
+android.build_tools = 28.0.3
 
 # (bool) Use --private data storage (True) or --dir public storage (False)
 android.private_storage = False
