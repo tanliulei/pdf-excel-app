@@ -41,6 +41,12 @@ author = PDF Tools Team
 # (int) Log level (0 = error only, 1 = info, 2 = debug (with command output))
 log_level = 2
 
+# (str) Path to build artifact storage, optional
+# build_dir = ./.buildozer
+
+# (str) Path to build output (i.e. .apk, .aab, .ipa) storage
+# bin_dir = ./bin
+
 [android]
 
 # (bool) Indicate if the application should be fullscreen or not
@@ -72,3 +78,12 @@ android.theme = @android:style/Theme.NoTitleBar
 
 # (bool) Use --private data storage (True) or --dir public storage (False)
 android.private_storage = False
+
+# (str) Android logcat filters to use
+android.logcat_filters = *:S python:D
+
+# (bool) Copy library instead of making a libpymodules.so
+android.copy_libs = 1
+
+# (str) The Android arch to build for, choices: armeabi-v7a, arm64-v8a, x86, x86_64
+android.archs = arm64-v8a, armeabi-v7a
