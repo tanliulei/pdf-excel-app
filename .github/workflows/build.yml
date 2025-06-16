@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     
     steps:
     - name: 检出代码
@@ -19,31 +19,25 @@ jobs:
       with:
         python-version: '3.9'
     
+    - name: 设置Java环境
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '11'
+    
+    - name: 设置Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        api-level: 33
+        build-tools: 33.0.2
+        ndk: 25.2.9519653
+    
     - name: 安装系统依赖
       run: |
         sudo apt-get update
-        sudo apt-get install -y openjdk-11-jdk autoconf libtool pkg-config \
+        sudo apt-get install -y autoconf libtool pkg-config \
           zlib1g-dev libncurses5-dev libncursesw5-dev libncurses-dev cmake \
-          libffi-dev libssl-dev build-essential python3-dev git unzip wget
-    
-    - name: 设置Java环境
-      run: |
-        export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
-        echo "JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64" >> $GITHUB_ENV
-    
-    - name: 手动安装Android SDK
-      run: |
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip
-        unzip -q commandlinetools-linux-*_latest.zip
-        mkdir -p $HOME/android-sdk/cmdline-tools
-        mv cmdline-tools $HOME/android-sdk/cmdline-tools/latest
-        export ANDROID_HOME=$HOME/android-sdk
-        export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
-        echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
-        echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
-        echo "$HOME/android-sdk/platform-tools" >> $GITHUB_PATH
-        yes | sdkmanager --licenses
-        sdkmanager "build-tools;33.0.0" "platforms;android-33" "platform-tools"
+          libffi-dev libssl-dev build-essential python3-dev git
     
     - name: 安装Python依赖
       run: |
